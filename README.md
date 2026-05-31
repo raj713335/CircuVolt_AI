@@ -6,54 +6,6 @@ An **agentic AI platform** that predicts EV battery State of Health, assigns a s
 
 ---
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Frontend (React + CopilotKit + AG-UI Protocol)         │
-│    ├── CopilotSidebar (conversational AI assistant)     │
-│    ├── CopilotActions (frontend tool actions)           │
-│    ├── Dashboard / SOH / Passport / Recovery / Design   │
-│    └── Recharts visualizations                          │
-└──────────────────────┬──────────────────────────────────┘
-                       │ AG-UI Protocol (SSE streaming)
-┌──────────────────────▼──────────────────────────────────┐
-│  CopilotKit Runtime (FastAPI)                           │
-│    ├── POST /copilotkit  → AG-UI streaming endpoint     │
-│    ├── GET  /.well-known/agent.json  → A2A Agent Card   │
-│    ├── POST /a2a/tasks/send  → A2A task processing      │
-│    ├── POST /a2a/tasks/sendSubscribe → A2A streaming    │
-│    └── REST API endpoints (/predict-soh, etc.)          │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│  LangGraph ReAct Agent                                  │
-│    ├── System prompt (circularity domain expert)        │
-│    └── LangChain @tool wrappers                         │
-│         ├── predict_battery_soh                         │
-│         ├── grade_battery                               │
-│         ├── generate_material_passport                  │
-│         ├── plan_recovery                               │
-│         ├── calculate_circularity                       │
-│         └── analyze_recyclability                       │
-└──────────────────────┬──────────────────────────────────┘
-                       │  (MCP-compatible tools)
-┌──────────────────────▼──────────────────────────────────┐
-│  MCP Tool Server (Model Context Protocol)               │
-│    Standalone server: python mcp_server/server.py       │
-│    Same tools exposed as MCP resources + tools          │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│  ML Models + SQLite Database                            │
-│    ├── GradientBoosting SOH Predictor                   │
-│    ├── Grading Engine (rule-based + safety overrides)   │
-│    ├── Material Passport Generator                      │
-│    ├── Recovery Optimizer (graph-based scoring)          │
-│    ├── Carbon Calculator                                │
-│    └── Recyclability Advisor                            │
-└─────────────────────────────────────────────────────────┘
-```
 
 ## Architecture Diagram
 
