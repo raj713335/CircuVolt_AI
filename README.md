@@ -122,7 +122,8 @@ CopilotKit implements AG-UI natively and provides:
 ### Backend
 
 ```bash
-cd backend
+git clone https://github.com/raj713335/CircuVolt_AI
+cd CircuVolt_AI
 pip install -r requirements.txt
 
 # Optional: set OpenAI key for full agent capabilities
@@ -139,14 +140,15 @@ python main.py
 ### MCP Server (standalone)
 
 ```bash
-cd backend
+cd CircuVolt_AI
 python mcp_server/server.py
 ```
 
 ### Frontend
 
 ```bash
-cd frontend
+git clone https://github.com/raj713335/CircuVolt_AI_UI
+cd CircuVolt_AI_UI
 npm install
 npm run dev
 ```
