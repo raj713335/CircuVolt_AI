@@ -1,11 +1,11 @@
 """
 Battery State of Health (SOH) Prediction Model
-Uses XGBoost with synthetic training data for hackathon demo.
-In production, this would be trained on NASA/CALCE battery aging datasets.
+Uses XGBoost with advanced synthetic non-linear training data modeling.
+Includes Second-Life Grading, Non-Linear RUL Estimation, and Dynamic Confidence.
 """
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import GradientBoostingRegressor
+import xgboost as xgb
 from sklearn.preprocessing import StandardScaler
 import json
 import os
@@ -15,32 +15,45 @@ _model = None
 _scaler = None
 
 
-def _generate_training_data(n_samples=2000):
-    """Generate synthetic battery aging data for demo purposes."""
+def _generate_training_data(n_samples=2500):
+    """Generate synthetic battery aging data with non-linear exponential degradation."""
     np.random.seed(42)
 
-    cycle_counts = np.random.uniform(100, 3000, n_samples)
+    cycle_counts = np.random.uniform(0, 4000, n_samples)
     voltages = np.random.uniform(3.0, 4.2, n_samples)
-    currents = np.random.uniform(0.5, 5.0, n_samples)
-    temperatures = np.random.uniform(15, 45, n_samples)
-    charge_capacities = np.random.uniform(20, 100, n_samples)
-    internal_resistances = np.random.uniform(10, 200, n_samples)
-    depths_of_discharge = np.random.uniform(50, 100, n_samples)
-    max_temperatures = temperatures + np.random.uniform(5, 20, n_samples)
-    energy_throughputs = cycle_counts * np.random.uniform(0.5, 2.0, n_samples)
+    currents = np.random.uniform(0.5, 6.0, n_samples)
+    temperatures = np.random.uniform(10, 55, n_samples)
+    charge_capacities = np.random.uniform(30, 120, n_samples)
+    
+    # Internal resistance increases non-linearly with cycles and temperature
+    internal_resistances = 10 + (cycle_counts / 1000)**1.5 * np.random.uniform(2, 5, n_samples) + \
+                           np.where(temperatures > 40, (temperatures - 40)**2 * 0.1, 0)
+                           
+    depths_of_discharge = np.random.uniform(20, 100, n_samples)
+    max_temperatures = temperatures + np.random.uniform(2, 25, n_samples)
+    energy_throughputs = cycle_counts * np.random.uniform(0.5, 2.5, n_samples)
 
-    # SOH degrades with cycles, high temperature, high resistance
+    # SOH degrades non-linearly. The "knee" effect happens at high cycles or high resistance.
     base_soh = 100.0
-    cycle_degradation = cycle_counts * np.random.uniform(0.005, 0.015, n_samples)
-    temp_degradation = np.where(temperatures > 35, (temperatures - 35) * 0.3, 0)
-    resistance_degradation = (internal_resistances - 10) * 0.05
-    dod_degradation = (depths_of_discharge - 50) * 0.02
+    
+    # Linear phase
+    cycle_degradation = cycle_counts * 0.005 
+    
+    # Exponential "knee" phase
+    knee_effect = np.where(cycle_counts > 2000, ((cycle_counts - 2000) / 1000)**2.5 * 10, 0)
+    
+    # Stressors
+    temp_stress = np.where(max_temperatures > 45, (max_temperatures - 45)**1.2 * 0.5, 0)
+    dod_stress = (depths_of_discharge / 100)**2 * (cycle_counts / 1000) * 2
+    ir_stress = np.where(internal_resistances > 50, (internal_resistances - 50) * 0.2, 0)
 
-    soh = base_soh - cycle_degradation - temp_degradation - resistance_degradation - dod_degradation
-    soh = np.clip(soh + np.random.normal(0, 2, n_samples), 20, 100)
+    soh = base_soh - cycle_degradation - knee_effect - temp_stress - dod_stress - ir_stress
+    
+    # Add natural variance
+    soh = np.clip(soh + np.random.normal(0, 1.5, n_samples), 10, 100)
 
-    discharge_capacities = charge_capacities * (soh / 100) * np.random.uniform(0.95, 1.0, n_samples)
-    rated_capacities = charge_capacities * np.random.uniform(1.0, 1.1, n_samples)
+    discharge_capacities = charge_capacities * (soh / 100) * np.random.uniform(0.97, 1.0, n_samples)
+    rated_capacities = charge_capacities * np.random.uniform(1.0, 1.05, n_samples)
 
     data = pd.DataFrame({
         'cycle_count': cycle_counts,
@@ -60,7 +73,7 @@ def _generate_training_data(n_samples=2000):
 
 
 def _train_model():
-    """Train the SOH prediction model."""
+    """Train the advanced XGBoost SOH prediction model."""
     global _model, _scaler
 
     X, y = _generate_training_data()
@@ -68,11 +81,14 @@ def _train_model():
     _scaler = StandardScaler()
     X_scaled = _scaler.fit_transform(X)
 
-    _model = GradientBoostingRegressor(
-        n_estimators=200,
-        max_depth=5,
-        learning_rate=0.1,
-        random_state=42
+    _model = xgb.XGBRegressor(
+        n_estimators=300,
+        max_depth=6,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42,
+        n_jobs=-1
     )
     _model.fit(X_scaled, y)
 
@@ -89,9 +105,7 @@ def get_model():
 
 def predict_soh(input_data: dict) -> dict:
     """
-    Predict battery State of Health.
-
-    Returns predicted SOH, RUL, confidence, and feature importances.
+    Predict battery State of Health with Second-Life Grading and Non-Linear RUL.
     """
     model, scaler = get_model()
 
@@ -113,16 +127,42 @@ def predict_soh(input_data: dict) -> dict:
     predicted_soh = float(model.predict(features_scaled)[0])
     predicted_soh = max(0.0, min(100.0, predicted_soh))
 
-    # Estimate RUL based on SOH and degradation rate
-    if input_data['cycle_count'] > 0:
-        degradation_rate = (100 - predicted_soh) / input_data['cycle_count']
-        if degradation_rate > 0:
-            rul_cycles = int((predicted_soh - 60) / degradation_rate)  # Until 60% SOH
-            rul_cycles = max(0, rul_cycles)
-        else:
-            rul_cycles = 5000
+    # Second-Life Grading Logic
+    if predicted_soh >= 85.0:
+        grade = "Grade A"
+        recommendation = "Excellent - Suitable for EV reuse or high-demand applications."
+    elif predicted_soh >= 70.0:
+        grade = "Grade B"
+        recommendation = "Good - Suitable for Stationary Battery Energy Storage Systems (BESS)."
     else:
-        rul_cycles = 5000
+        grade = "Grade C"
+        recommendation = "End of Life - Recommended for Material Recycling and Recovery."
+
+    # Non-linear RUL Estimation
+    # Assume EOL threshold is 60% SOH. Use an exponential curve decay.
+    # Current SOH = 100 * e^(-k * cycle_count). We find 'k' based on current state.
+    cycle_count = input_data['cycle_count']
+    if cycle_count > 10 and predicted_soh < 99:
+        # Solve for decay constant k: k = -ln(SOH/100) / cycles
+        k = -np.log(predicted_soh / 100.0) / cycle_count
+        # Target cycles at 60% SOH: cycles = -ln(0.60) / k
+        target_cycles = -np.log(0.60) / k
+        rul_cycles = int(target_cycles - cycle_count)
+        rul_cycles = max(0, rul_cycles)
+    else:
+        # If very new, assume roughly 2500-4000 total cycles
+        rul_cycles = int(3500 - cycle_count)
+        rul_cycles = max(0, rul_cycles)
+
+    # Dynamic Confidence Estimation (Penalize outliers)
+    temp = input_data['temperature']
+    res = input_data['internal_resistance']
+    if temp > 50 or temp < 0 or res > 150:
+        confidence = "Low - Operating in extreme outlier bounds"
+    elif temp > 40 or res > 100 or predicted_soh < 50:
+        confidence = "Medium - High variance region"
+    else:
+        confidence = "High"
 
     # Feature importances
     feature_names = [
@@ -135,15 +175,7 @@ def predict_soh(input_data: dict) -> dict:
     top_indices = np.argsort(importances)[::-1][:5]
     top_features = [feature_names[i] for i in top_indices]
 
-    # Confidence estimation
-    if predicted_soh > 85 or predicted_soh < 50:
-        confidence = "High"
-    elif predicted_soh > 70:
-        confidence = "Medium"
-    else:
-        confidence = "Medium"
-
-    # SHAP-like feature contributions (simplified)
+    # SHAP-like feature contributions
     shap_values = {}
     for i, name in enumerate(feature_names):
         shap_values[name] = round(float(importances[i] * 100), 2)
@@ -151,9 +183,10 @@ def predict_soh(input_data: dict) -> dict:
     return {
         'predicted_soh': round(predicted_soh, 1),
         'rul_cycles': rul_cycles,
+        'grade': grade,
+        'recommendation': recommendation,
         'confidence': confidence,
         'top_features': top_features,
         'shap_values': shap_values,
         'feature_importances': {feature_names[i]: round(float(importances[i]), 4) for i in range(len(feature_names))}
     }
-
