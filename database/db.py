@@ -55,6 +55,18 @@ class PredictionLog(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
 
+class VehicleRecord(Base):
+    __tablename__ = "vehicles"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    name = Column(String, index=True)
+    type = Column(String)
+    year = Column(String)
+    msrp = Column(String)
+    data = Column(JSON)  # Store the full JSON payload
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 

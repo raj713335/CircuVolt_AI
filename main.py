@@ -88,8 +88,8 @@ async def lifespan(app: FastAPI):
     """Application lifespan - initialize on startup, cleanup on shutdown."""
     init_db()
     get_model()
-    print("✅ CircularDrive AI Backend initialized")
-    print("✅ SOH Prediction model trained and ready")
+    print("CircularDrive AI Backend initialized")
+    print("SOH Prediction model trained and ready")
     print("✅ LangGraph agent available")
     print("✅ MCP server tools registered")
     print("✅ A2A protocol endpoints active")
@@ -1514,6 +1514,24 @@ Return ONLY the JSON object, no other text."""
             json_match = re.search(r'\{[\s\S]*\}', content)
             if json_match:
                 vehicle_data = json.loads(json_match.group())
+                
+                # Save to database
+                try:
+                    from database.db import SessionLocal, VehicleRecord
+                    db = SessionLocal()
+                    db_vehicle = VehicleRecord(
+                        name=vehicle_data.get("name"),
+                        type=vehicle_data.get("type"),
+                        year=str(vehicle_data.get("year", "")),
+                        msrp=str(vehicle_data.get("msrp", "")),
+                        data=vehicle_data
+                    )
+                    db.add(db_vehicle)
+                    db.commit()
+                    db.close()
+                except Exception as db_e:
+                    print(f"Error saving vehicle to DB: {db_e}")
+                    
                 yield f"data: {json.dumps({'type': 'vehicle', 'data': vehicle_data})}\n\n"
             else:
                 yield f"data: {json.dumps({'type': 'error', 'text': 'Could not parse vehicle data from LLM response'})}\n\n"
