@@ -55,6 +55,97 @@ An **agentic AI platform** that predicts EV battery State of Health, assigns a s
 └─────────────────────────────────────────────────────────┘
 ```
 
+## Architecture Diagram
+
+```mermaid
+graph TD
+    %% Styling
+    classDef frontend fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,font-weight:bold
+    classDef backend fill:#6366f1,stroke:#4338ca,stroke-width:2px,color:#fff,font-weight:bold
+    classDef ai fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff,font-weight:bold
+    classDef external fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff,font-weight:bold
+    classDef storage fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff,font-weight:bold
+
+    %% Frontend Components
+    subgraph Frontend["Frontend Layer (React / Vite)"]
+        UI_Router["React Router"]
+        
+        UI_CarStudio["🚗 3D Car Studio<br/>(React Three Fiber)"]
+        UI_SOH["🔋 SOH Predictor<br/>(Recharts Analytics)"]
+        UI_Design["🛠️ Design Advisor<br/>(Interactive Forms)"]
+        UI_Passport["♻️ Material Passport<br/>(Data Grids)"]
+        
+        UI_Router --> UI_CarStudio
+        UI_Router --> UI_SOH
+        UI_Router --> UI_Design
+        UI_Router --> UI_Passport
+    end
+    
+    %% API Gateway
+    Gateway["API Gateway / FastAPI Router"]
+
+    %% Backend Components
+    subgraph Backend["Backend Layer (Python / FastAPI)"]
+        API_SOH["SOH Inference Engine<br/>(Predictive Modeling)"]
+        API_Recycle["Recyclability Rules Engine<br/>(EU Benchmarks)"]
+        API_Passport["Passport Generator<br/>(Provenance & Carbon Tracking)"]
+        
+        LLM_Agent["LLM Orchestrator<br/>(LangChain / Semantic Router)"]
+    end
+
+    %% External Services
+    LLM_Provider["External LLM API<br/>(OpenAI / Gemini)"]
+    DB_Materials["Material Properties Database"]
+    
+    %% Connections
+    UI_SOH -- "Battery Telemetry Data" --> Gateway
+    UI_Design -- "Component Design Specs" --> Gateway
+    UI_Passport -- "Component ID Request" --> Gateway
+
+    Gateway --> API_SOH
+    Gateway --> API_Recycle
+    Gateway --> API_Passport
+    Gateway --> LLM_Agent
+
+    %% Internal Data Flow
+    API_Recycle -- "Raw Score & Issues" --> LLM_Agent
+    API_SOH -- "Historical Data" --> DB_Materials
+    API_Passport -- "Query Lifecycle Data" --> DB_Materials
+
+    %% External Data Flow
+    LLM_Agent -- "Prompt + Context" --> LLM_Provider
+    LLM_Provider -- "Actionable Redesign Streams" --> LLM_Agent
+
+    %% Return Data Flow
+    LLM_Agent -- "Streaming SSE" --> Gateway
+    API_SOH -- "Predictions & Degradation Arrays" --> Gateway
+    API_Passport -- "Digital Twin JSON" --> Gateway
+
+    Gateway -- "Response / Stream" --> Frontend
+
+    %% Apply Classes
+    class Frontend,UI_Router,UI_CarStudio,UI_SOH,UI_Design,UI_Passport frontend;
+    class Backend,Gateway,API_SOH,API_Recycle,API_Passport backend;
+    class LLM_Agent,LLM_Provider ai;
+    class DB_Materials storage;
+```
+
+### Layer Breakdown
+
+1. **Frontend Layer (React + Vite)**
+   - Uses `React Three Fiber` for high-performance 3D rendering (explodable battery models).
+   - Uses `Recharts` for advanced analytics (MathWorks-style degradation curves and radar charts).
+   - Consumes Server-Sent Events (SSE) to stream LLM responses in real-time.
+
+2. **Backend Layer (FastAPI)**
+   - **SOH Inference Engine**: Computes battery degradation matrices, internal resistance drops, and generates synthetic forecast data.
+   - **Recyclability Rules Engine**: Evaluates JSON payloads of component properties against hardcoded EU battery regulations and material science heuristics.
+   - **LLM Orchestrator**: Takes the deterministic outputs from the Rules Engine and passes them as context to a Large Language Model to generate human-readable, actionable redesign recommendations via an SSE stream.
+
+3. **External Integrations**
+   - **LLM API**: Powers the deep generative insights.
+   - **Material Database**: Stores static lookup tables for material lifecycle carbon footprints, recovery rates, and market values.
+
 ---
 
 ## Protocol Integration
