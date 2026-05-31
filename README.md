@@ -2,7 +2,7 @@
 
 ## Battery Second-Life + Material Passport Intelligence Platform
 
-An **agentic AI platform** that predicts EV battery State of Health, assigns a second-life/recycling grade, generates a QR-based material passport, and recommends the safest, highest-value circular-economy pathway — built with **LangGraph**, **MCP**, **A2A Protocol**, **AG-UI Protocol**, and **CopilotKit**.
+An **agentic AI platform** that predicts EV battery State of Health, assigns a second-life/recycling grade, generates a QR-based material passport, and recommends the safest, highest-value circular-economy pathway built with **LangGraph**, **MCP**, **A2A Protocol**, **AG-UI Protocol**, and **CopilotKit**.
 
 ---
 
@@ -242,9 +242,9 @@ npm run dev
 2. Click chat icon → AI Copilot opens (CopilotKit sidebar)
 3. Ask: *"Predict SOH for a battery with 1200 cycles, 65mΩ resistance"*
 4. Agent uses LangGraph → calls `predict_battery_soh` tool → streams result
-5. Navigate to Passport tab → Generate QR-based material passport
+5. Navigate to the Passport tab → Generate QR-based material passport
 6. Navigate to Recovery → View disassembly plan + carbon impact
-7. Ask copilot: *"Why is this battery not suitable for second life?"*
+7. Ask Copilot: *"Why is this battery not suitable for a second life?"*
 8. Agent explains using grading rules from MCP resources
 
 
