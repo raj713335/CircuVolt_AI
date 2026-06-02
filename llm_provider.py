@@ -57,3 +57,5 @@ def get_llm() -> BaseChatModel:
 
         return ChatOpenAI(**kwargs)
 
+    else:
+        raise ValueError(f"Unsupported LLM provider: '{provider}'. Set LLM_PROVIDER=openai in .env.")

@@ -54,7 +54,7 @@ def calculate_grade(soh: float, internal_resistance: float = 50.0,
         grade = _downgrade(grade, 1)
 
     # Rapid capacity fade check (high cycles with moderate SOH loss)
-    if cycle_count > 0:
+    if cycle_count > 10:
         fade_rate = (100 - soh) / cycle_count
         if fade_rate > 0.02:
             risk_flags.append("rapid_capacity_fade")

@@ -129,13 +129,16 @@ def predict_soh(input_data: dict) -> dict:
 
     # Second-Life Grading Logic
     if predicted_soh >= 85.0:
-        grade = "Grade A"
+        grade = "A"
         recommendation = "Excellent - Suitable for EV reuse or high-demand applications."
     elif predicted_soh >= 70.0:
-        grade = "Grade B"
+        grade = "B"
         recommendation = "Good - Suitable for Stationary Battery Energy Storage Systems (BESS)."
+    elif predicted_soh >= 60.0:
+        grade = "C"
+        recommendation = "Fair - Module-level refurbishment or limited backup use."
     else:
-        grade = "Grade C"
+        grade = "D"
         recommendation = "End of Life - Recommended for Material Recycling and Recovery."
 
     # Non-linear RUL Estimation

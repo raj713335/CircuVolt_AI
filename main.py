@@ -58,7 +58,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-from database.db import init_db, get_db, SessionLocal, PassportRecord, PredictionLog
+from database.db import init_db, get_db, SessionLocal, PassportRecord, PredictionLog, VehicleRecord
 from schemas.schemas import (
     BatteryInput, SOHPredictionResponse,
     PassportInput, PassportResponse,
@@ -1532,9 +1532,8 @@ Return ONLY the JSON object, no other text."""
                 vehicle_data = json.loads(json_match.group())
                 
                 # Save to database
+                db = SessionLocal()
                 try:
-                    from database.db import SessionLocal, VehicleRecord
-                    db = SessionLocal()
                     db_vehicle = VehicleRecord(
                         name=vehicle_data.get("name"),
                         type=vehicle_data.get("type"),
@@ -1544,9 +1543,10 @@ Return ONLY the JSON object, no other text."""
                     )
                     db.add(db_vehicle)
                     db.commit()
-                    db.close()
                 except Exception as db_e:
                     print(f"Error saving vehicle to DB: {db_e}")
+                finally:
+                    db.close()
                     
                 yield f"data: {json.dumps({'type': 'vehicle', 'data': vehicle_data})}\n\n"
             else:

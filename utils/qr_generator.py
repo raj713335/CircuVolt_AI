@@ -2,7 +2,6 @@
 QR Code Generator for Material Passports
 """
 import qrcode
-from qrcode.image.styledpil import StyledPilImage
 import io
 import base64
 import os
