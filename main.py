@@ -1484,6 +1484,7 @@ Return a JSON object (and ONLY valid JSON, no markdown) for the BEST matching re
 {{
   "name": "Full vehicle name",
   "type": "Vehicle type (e.g. Electric Sedan, Hybrid SUV)",
+  "powertrain": "Detailed powertrain type (e.g. Battery Electric, Internal Combustion Engine, Plug-in Hybrid, Hydrogen Fuel Cell. Mention if multiple variants exist)",
   "year": "2024",
   "msrp": "$XX,XXX",
   "bodyColor": "#hex color matching the most popular color for this car",
@@ -1571,6 +1572,7 @@ def _generate_fallback_vehicle(query: str) -> dict:
     return {
         "name": name,
         "type": "Vehicle",
+        "powertrain": "Unknown",
         "year": "2024",
         "msrp": "N/A",
         "bodyColor": "#2d3436",
