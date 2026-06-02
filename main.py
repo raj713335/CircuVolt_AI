@@ -1026,6 +1026,9 @@ async def recommend_recovery(recovery_input: RecoveryInput):
         result = generate_recovery_plan(
             grade=recovery_input.grade, soh=recovery_input.soh,
             chemistry=recovery_input.chemistry, module_count=recovery_input.module_count,
+            component_type=recovery_input.component_type,
+            motor_type=recovery_input.motor_type,
+            semiconductor_type=recovery_input.semiconductor_type,
             materials=recovery_input.materials,
         )
         return RecoveryResponse(
@@ -1077,6 +1080,7 @@ def _get_recovery_summary(params, score, plan, material, carbon, econ):
     """Generate recovery summary via LLM or rule-engine fallback."""
     grade = params.get("grade", "C")
     soh = params.get("soh", 0)
+    component_type = params.get("component_type", "EV Battery Pack")
     chemistry = params.get("chemistry", "NMC")
     modules = params.get("module_count", 0)
     co2 = carbon.get("total_carbon_avoided_kgco2e", 0)
@@ -1088,8 +1092,8 @@ def _get_recovery_summary(params, score, plan, material, carbon, econ):
     try:
         from agents.circularity_agent import create_circularity_agent
         prompt = (
-            f"Analyze this EV battery recovery plan:\n"
-            f"- Grade: {grade}, SOH: {soh}%, Chemistry: {chemistry}, Modules: {modules}\n"
+            f"Analyze this {component_type} recovery plan:\n"
+            f"- Grade: {grade}, SOH: {soh}%, Component: {component_type}\n"
             f"- Recovery score: {score}/100, Material recovery: {recovery_pct}%\n"
             f"- CO₂ avoided: {co2} kg, Net economic value: ${net_val}\n"
             f"- Disassembly steps: {len(plan)}\n\n"
@@ -1107,11 +1111,11 @@ def _get_recovery_summary(params, score, plan, material, carbon, econ):
     parts = []
 
     if score >= 70:
-        parts.append(f"**Executive Summary**\nThis {chemistry} battery pack scores {score}/100 on recovery — a strong result. Grade {grade} with {soh}% SOH enables high-value recovery through {'direct reuse' if grade == 'A' else 'second-life applications' if grade == 'B' else 'component refurbishment' if grade == 'C' else 'material recycling'}.")
+        parts.append(f"**Executive Summary**\nThis {component_type} scores {score}/100 on recovery — a strong result. Grade {grade} with {soh}% SOH enables high-value recovery.")
     elif score >= 50:
-        parts.append(f"**Executive Summary**\nRecovery score of {score}/100 indicates moderate recovery potential for this {chemistry} pack. With {modules} modules at {soh}% SOH, a mixed-pathway approach combining module reuse and material recycling is optimal.")
+        parts.append(f"**Executive Summary**\nRecovery score of {score}/100 indicates moderate recovery potential for this {component_type}. A mixed-pathway approach combining reuse and material recycling is optimal.")
     else:
-        parts.append(f"**Executive Summary**\nAt {score}/100, this {chemistry} pack has limited recovery potential. Low SOH ({soh}%) and Grade {grade} suggest prioritizing material recycling with hydrometallurgical processing.")
+        parts.append(f"**Executive Summary**\nAt {score}/100, this {component_type} has limited recovery potential. Low SOH ({soh}%) and Grade {grade} suggest prioritizing material recycling.")
 
     # Safety
     high_risk = [s for s in plan if s.get("safety_level") == "high"]
@@ -1205,22 +1209,28 @@ async def circularity_ai_summary_stream(request: Request):
 
 def _get_circularity_summary(params, score, breakdown):
     """Generate circularity summary via LLM or rule-engine fallback."""
+    component_type = params.get("component_type", "EV Battery Pack")
     soh = params.get("soh", 0)
     grade = params.get("grade", "C")
     mat_pct = params.get("materials_recovered_pct", 0)
     carbon = params.get("carbon_avoided_kg", 0)
     second_life = params.get("second_life_potential", False)
+    recycled = params.get("recycled_content_pct", 0)
+    dfd = params.get("dfd_rating", 0)
+    origin = params.get("origin", "Local")
 
     # Try LLM
     try:
         from agents.circularity_agent import create_circularity_agent
         prompt = (
-            f"Provide a detailed circularity assessment summary for an EV battery component:\n"
+            f"Provide a detailed circularity assessment summary for an {component_type}:\n"
             f"- Overall circularity score: {score}/100\n"
             f"- SOH: {soh}%, Grade: {grade}\n"
             f"- Materials recovered: {mat_pct}%\n"
             f"- Carbon avoided: {carbon} kg CO₂e\n"
             f"- Second-life potential: {'Yes' if second_life else 'No'}\n"
+            f"- Manufacturing: {recycled}% recycled content, {origin} origin\n"
+            f"- Design for Disassembly (DfD): {dfd}/10\n"
             f"- Breakdown: {', '.join(k + ': ' + str(v.get('score',0)) + '/' + str(v.get('max',0)) for k,v in breakdown.items())}\n\n"
             f"Give: 1) Executive summary (2 sentences), 2) Strengths (bullet points), "
             f"3) Improvement areas (bullet points), 4) EU compliance outlook, "
@@ -1246,7 +1256,7 @@ def _get_circularity_summary(params, score, breakdown):
     # Strengths
     strengths = []
     if soh > 70:
-        strengths.append(f"Battery health at {soh}% supports second-life applications, extending useful lifetime by 5-8 years")
+        strengths.append(f"Component health at {soh}% supports second-life applications, extending useful lifetime by 5-8 years")
     if mat_pct > 75:
         strengths.append(f"Material recovery rate of {mat_pct}% exceeds the EU minimum threshold of 70%")
     if carbon > 500:
@@ -1255,6 +1265,12 @@ def _get_circularity_summary(params, score, breakdown):
         strengths.append(f"Grade {grade} classification enables higher-value recovery pathways (reuse/second-life)")
     if second_life:
         strengths.append("Second-life potential confirmed — eligible for energy storage, grid balancing, or backup power applications")
+    if recycled >= 15:
+        strengths.append(f"Strong sustainable manufacturing with {recycled}% recycled content utilized")
+    if dfd >= 7:
+        strengths.append(f"High DfD rating ({dfd}/10) ensures efficient downstream robotic disassembly and material separation")
+    if origin == "Local":
+        strengths.append("Local manufacturing significantly reduces supply chain carbon emissions")
     if not strengths:
         strengths.append("Component is assessed and tracked, enabling data-driven improvement")
     parts.append("\n**Strengths:**\n" + "\n".join(f"• {s}" for s in strengths))

@@ -55,12 +55,16 @@ class PassportResponse(BaseModel):
 
 class RecoveryInput(BaseModel):
     component_id: str
+    component_type: str = "EV Battery Pack"
     grade: str
     soh: float
     chemistry: str = "NMC"
     module_count: int = 16
     cell_count: int = 192
     rated_capacity_kwh: float = 75.0
+    motor_type: Optional[str] = "PMSM"
+    semiconductor_type: Optional[str] = "Silicon Carbide (SiC)"
+    wear_level: Optional[str] = "Moderate"
     materials: Optional[dict] = None
 
 
@@ -75,11 +79,15 @@ class RecoveryResponse(BaseModel):
 
 class CircularityInput(BaseModel):
     component_id: str
+    component_type: str = "EV Battery Pack"
     soh: float
     grade: str
     materials_recovered_pct: float = 0.0
     carbon_avoided_kg: float = 0.0
     second_life_potential: bool = True
+    recycled_content_pct: float = 0.0
+    dfd_rating: float = 5.0
+    origin: str = "Local"
 
 
 class CircularityResponse(BaseModel):
