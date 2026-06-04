@@ -1,4 +1,4 @@
-# CircularDrive AI
+# CircuVolt AI
 
 ## Battery Second-Life + Material Passport Intelligence Platform
 
@@ -53,7 +53,7 @@ Implements Google's A2A specification for inter-agent communication:
 - **Task Subscribe** at `/a2a/tasks/sendSubscribe` : streaming SSE responses
 - **Task Status** at `/a2a/tasks/{id}` : check task progress
 
-Other AI agents can discover and interact with CircularDrive AI agents autonomously.
+Other AI agents can discover and interact with CircuVolt AI agents autonomously.
 
 ### AG-UI Protocol + CopilotKit
 The AG-UI (Agent-User Interaction) protocol streams agent state to the frontend:

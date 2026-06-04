@@ -1,6 +1,6 @@
 
 """
-LangGraph Circularity Agent for CircularDrive AI.
+LangGraph Circularity Agent for CircuVolt AI.
 
 This agent uses LangGraph's ReAct pattern to orchestrate multi-step
 battery circularity workflows. It connects to the MCP server for
