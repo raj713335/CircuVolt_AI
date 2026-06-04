@@ -69,11 +69,11 @@ def calculate_grade(soh: float, internal_resistance: float = 50.0,
 
     # Confidence level
     if confidence_penalty == 0 and len(risk_flags) == 0:
-        confidence = "High"
+        confidence = 0.92
     elif confidence_penalty <= 1 and len(risk_flags) <= 1:
-        confidence = "Medium"
+        confidence = 0.78
     else:
-        confidence = "Low"
+        confidence = 0.65
 
     # Updated recommendation based on final grade
     grade_recommendations = {

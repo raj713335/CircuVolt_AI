@@ -22,12 +22,40 @@ class SOHPredictionResponse(BaseModel):
     component_id: str
     predicted_soh: float
     rul_cycles: int
+    rul_years_stationary: float = 0.0
     grade: str
+    safety_status: str = "pass_with_monitoring"
     recommendation: str
-    confidence: str
+    recommended_route: str = "second_life_stationary_storage"
+    confidence: float = 0.85
     risk_flags: List[str]
     top_features: List[str]
     shap_values: Optional[dict] = None
+
+class DisassemblyInput(BaseModel):
+    vehicle_id: str = "VIN_HASH_8291"
+    make: str = "Generic"
+    model: str = "Model EV"
+    year: int = 2020
+    accident_condition: str = "Frontal Impact"
+    passport_status: str = "incomplete"
+
+class DisassemblyResponse(BaseModel):
+    vehicle_id: str
+    make: str = "Generic"
+    model: str = "Model EV"
+    year: int = 2020
+    accident_condition: str = "None"
+    priority_parts: List[dict]  # each: {part, route, weight_kg, value_usd, material, recyclability_pct, safety_risk}
+    depollution_steps: List[dict]  # each: {step, action, reason, duration_min, safety_level}
+    disassembly_sequence: List[dict]  # each: {step, component, tool_required, time_min, safety_note}
+    estimated_revenue: float
+    estimated_co2e_saving_kg: float
+    total_weight_kg: float
+    material_breakdown: List[dict]  # each: {material, weight_kg, recovery_rate_pct, value_per_kg}
+    passport_status: str
+    risk_score: float = 0.0  # 0-100, higher = more risk
+    automation_feasibility: float = 0.0  # 0-100, how much can be automated
 
 
 class PassportInput(BaseModel):

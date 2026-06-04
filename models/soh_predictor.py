@@ -127,19 +127,41 @@ def predict_soh(input_data: dict) -> dict:
     predicted_soh = float(model.predict(features_scaled)[0])
     predicted_soh = max(0.0, min(100.0, predicted_soh))
 
-    # Second-Life Grading Logic
-    if predicted_soh >= 85.0:
-        grade = "A"
+    # Safety & Grading Logic
+    temp = input_data['temperature']
+    res = input_data['internal_resistance']
+    max_temp = input_data.get('max_temperature', temp)
+    
+    safety_status = "pass_with_monitoring"
+    risk_flags = []
+    
+    if max_temp > 60:
+        safety_status = "quarantine_thermal_risk"
+        risk_flags.append("High thermal event history")
+    if res > 100:
+        safety_status = "quarantine_high_resistance"
+        risk_flags.append("Internal resistance exceeded safe limits")
+        
+    if safety_status != "pass_with_monitoring":
+        grade = "Reject / R"
+        recommendation = "End of Life - Safety failure overrides SOH."
+        recommended_route = "quarantine_then_recycle"
+    elif predicted_soh >= 85.0:
+        grade = "Grade A"
         recommendation = "Excellent - Suitable for EV reuse or high-demand applications."
+        recommended_route = "remanufacture_for_vehicle"
     elif predicted_soh >= 70.0:
-        grade = "B"
+        grade = "Grade B"
         recommendation = "Good - Suitable for Stationary Battery Energy Storage Systems (BESS)."
+        recommended_route = "second_life_stationary_storage"
     elif predicted_soh >= 60.0:
-        grade = "C"
+        grade = "Grade C"
         recommendation = "Fair - Module-level refurbishment or limited backup use."
+        recommended_route = "low_duty_storage"
     else:
-        grade = "D"
+        grade = "Grade D"
         recommendation = "End of Life - Recommended for Material Recycling and Recovery."
+        recommended_route = "direct_material_recycling"
 
     # Non-linear RUL Estimation
     # Assume EOL threshold is 60% SOH. Use an exponential curve decay.
@@ -156,16 +178,17 @@ def predict_soh(input_data: dict) -> dict:
         # If very new, assume roughly 2500-4000 total cycles
         rul_cycles = int(3500 - cycle_count)
         rul_cycles = max(0, rul_cycles)
+        
+    # Assuming stationary storage operates at approx 1 full cycle equivalent per day
+    rul_years_stationary = round(rul_cycles / 365.0, 1)
 
     # Dynamic Confidence Estimation (Penalize outliers)
-    temp = input_data['temperature']
-    res = input_data['internal_resistance']
     if temp > 50 or temp < 0 or res > 150:
-        confidence = "Low - Operating in extreme outlier bounds"
+        confidence = 0.65
     elif temp > 40 or res > 100 or predicted_soh < 50:
-        confidence = "Medium - High variance region"
+        confidence = 0.78
     else:
-        confidence = "High"
+        confidence = 0.92
 
     # Feature importances
     feature_names = [
@@ -186,9 +209,13 @@ def predict_soh(input_data: dict) -> dict:
     return {
         'predicted_soh': round(predicted_soh, 1),
         'rul_cycles': rul_cycles,
+        'rul_years_stationary': rul_years_stationary,
         'grade': grade,
+        'safety_status': safety_status,
         'recommendation': recommendation,
+        'recommended_route': recommended_route,
         'confidence': confidence,
+        'risk_flags': risk_flags,
         'top_features': top_features,
         'shap_values': shap_values,
         'feature_importances': {feature_names[i]: round(float(importances[i]), 4) for i in range(len(feature_names))}

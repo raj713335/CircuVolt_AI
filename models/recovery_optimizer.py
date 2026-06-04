@@ -61,18 +61,18 @@ def generate_recovery_plan(grade: str, soh: float, chemistry: str = "NMC",
         recovery_plan = _generate_inverter_steps(grade, semiconductor_type)
         material_recovery = _calculate_inverter_materials(grade, semiconductor_type, materials)
     else: # Battery Pack
-        if grade == "A":
-            strategy = "minimal_disassembly"
-            primary_action = "Reuse as complete pack or with minimal refurbishment"
-        elif grade == "B":
-            strategy = "module_level_assessment"
-            primary_action = "Test individual modules for second-life grading"
-        elif grade == "C":
-            strategy = "selective_recovery"
-            primary_action = "Identify reusable modules, recycle degraded ones"
+        if grade == "Grade A" or grade == "A":
+            strategy = "Remanufacturing for Vehicles"
+            primary_action = "Repair/remanufacture for automotive service (restore capacity >90%)"
+        elif grade == "Grade B" or grade == "B":
+            strategy = "Second-Life Stationary Storage"
+            primary_action = "Repurpose for home/grid storage, telecom backup, or microgrids"
+        elif grade == "Grade C" or grade == "C":
+            strategy = "Direct Recycling / Low-Duty Storage"
+            primary_action = "Regenerate cathode material or use in low C-rate applications"
         else:
-            strategy = "full_recycling"
-            primary_action = "Complete disassembly for maximum material recovery"
+            strategy = "Hydrometallurgical Recycling"
+            primary_action = "Mechanical shredding followed by chemical leaching to recover battery metals"
         recovery_plan = _generate_battery_steps(grade, strategy, module_count)
         material_recovery = _calculate_battery_materials(grade, chemistry, materials)
 
