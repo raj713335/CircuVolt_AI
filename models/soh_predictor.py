@@ -40,12 +40,12 @@ def _generate_training_data(n_samples=2500):
     cycle_degradation = cycle_counts * 0.005 
     
     # Exponential "knee" phase
-    knee_effect = np.where(cycle_counts > 2000, ((cycle_counts - 2000) / 1000)**2.5 * 10, 0)
+    knee_effect = (np.maximum(0, cycle_counts - 2000) / 1000)**2.5 * 10
     
     # Stressors
-    temp_stress = np.where(max_temperatures > 45, (max_temperatures - 45)**1.2 * 0.5, 0)
+    temp_stress = np.maximum(0, max_temperatures - 45)**1.2 * 0.5
     dod_stress = (depths_of_discharge / 100)**2 * (cycle_counts / 1000) * 2
-    ir_stress = np.where(internal_resistances > 50, (internal_resistances - 50) * 0.2, 0)
+    ir_stress = np.maximum(0, internal_resistances - 50) * 0.2
 
     soh = base_soh - cycle_degradation - knee_effect - temp_stress - dod_stress - ir_stress
     
