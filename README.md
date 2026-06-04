@@ -236,16 +236,30 @@ npm run dev
 
 ---
 
-## Demo Flow
+## Adoption roadmap for AI-enabled battery circularity in automotive
 
-1. Open the app → Dashboard with architecture overview
-2. Click chat icon → AI Copilot opens (CopilotKit sidebar)
-3. Ask: *"Predict SOH for a battery with 1200 cycles, 65mΩ resistance"*
-4. Agent uses LangGraph → calls `predict_battery_soh` tool → streams result
-5. Navigate to the Passport tab → Generate QR-based material passport
-6. Navigate to Recovery → View disassembly plan + carbon impact
-7. Ask Copilot: *"Why is this battery not suitable for a second life?"*
-8. Agent explains using grading rules from MCP resources
 
+```mermaid
+
+---
+config:
+  theme: redux-color
+---
+timeline
+    title Adoption roadmap for AI-enabled battery circularity in automotive
+    2026 : Standardize battery genealogy, pack IDs, and service-history capture
+         : Build grading lakehouse from BMS, CAN, telematics, lab, and repair data
+         : Pilot AI-assisted SOH grading on retirements and warranty returns
+    2027 : Expose BMS SoH and expected-lifetime data to authorized users
+         : Deploy battery-passport-ready data models and interoperability layer
+         : Launch residual-value and routing workflows for reuse, repair, and recycle
+    2028 : Scale transfer-learning SOH models across mixed chemistries and OEM programs
+         : Deploy robotic assistance for screws, covers, connectors, and hazard-prone steps
+         : Add chemistry-aware intake screening for direct-recycling feedstock
+    2029 : Connect grading, marketplace, BESS repurposing, and recycler routing in one control plane
+         : Close loop between recovered-material quality and upstream grading decisions
+    2030 and beyond : Use lifecycle data to influence pack design-for-disassembly and design-for-recycling
+                   : Run closed-loop optimization across first life, second life, and recovery
+```
 
 
