@@ -49,8 +49,11 @@ import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Optional
+import re
+from io import BytesIO
+import PyPDF2
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from dotenv import load_dotenv
@@ -2034,6 +2037,453 @@ def _generate_fallback_vehicle(query: str) -> dict:
         ],
     }
 
+
+# --- RAG Knowledge Base In-Memory Stores ---
+SECURITY_SETTINGS = {
+    "pii_regex": {
+        "EMAIL": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+        "PHONE": r"\+?\d[\d\s.-]{7,}\d",
+        "SSN": r"\b\d{3}-\d{2}-\d{4}\b"
+    },
+    "blocklist": "password, secret, private_key, ssn, api_key, auth_token, jwt, confidential"
+}
+
+DOCUMENT_STORE = {}
+
+# --- ChromaDB Vector Database ---
+import chromadb
+chroma_client = chromadb.Client()
+rag_collection = chroma_client.get_or_create_collection(
+    name="circuvolt_rag",
+    metadata={"hnsw:space": "cosine"}
+)
+print("ChromaDB vector store initialized")
+
+@app.get("/security-settings")
+async def get_security_settings():
+    return SECURITY_SETTINGS
+
+@app.post("/security-settings")
+async def update_security_settings(request: Request):
+    data = await request.json()
+    if "pii_regex" in data:
+        SECURITY_SETTINGS["pii_regex"] = data["pii_regex"]
+    if "blocklist" in data:
+        SECURITY_SETTINGS["blocklist"] = data["blocklist"]
+    return {"status": "success"}
+
+@app.post("/upload-document")
+async def upload_document(
+    file: UploadFile = File(...),
+    agentic_scan: str = Form("true"),
+    word_masking: str = Form("true")
+):
+    agentic_scan_bool = agentic_scan.lower() == "true"
+    word_masking_bool = word_masking.lower() == "true"
+    
+    content = ""
+    if file.filename.endswith(".pdf"):
+        pdf_bytes = await file.read()
+        reader = PyPDF2.PdfReader(BytesIO(pdf_bytes))
+        for page in reader.pages:
+            content += page.extract_text() + "\n"
+    else:
+        content_bytes = await file.read()
+        content = content_bytes.decode('utf-8', errors='ignore')
+    
+    # Run Agentic Security Scan & Word Masking
+    rejections = []
+    for pii_type, pattern in SECURITY_SETTINGS["pii_regex"].items():
+        try:
+            if agentic_scan_bool:
+                matches = set(re.findall(pattern, content))
+                if matches:
+                    matches_str = ", ".join(list(matches)[:3])
+                    rejections.append(f"A {pii_type.lower()}: {matches_str}")
+            if word_masking_bool:
+                content = re.sub(pattern, f"[{pii_type}_REDACTED]", content)
+        except Exception as e:
+            pass
+            
+    doc_id = str(uuid.uuid4())
+    
+    if rejections and agentic_scan_bool:
+        message = "Agentic Security Rejected Document: The document contains PII that should not be indexed. Specifically, it includes:\n"
+        for r in rejections:
+            message += f"- {r}\n"
+        message += "These are considered personally identifiable information and should be redacted before ingestion."
+        
+        doc_metadata = {
+            "id": doc_id,
+            "filename": file.filename,
+            "status": "rejected",
+            "message": message,
+            "vectors": 0,
+            "content": content
+        }
+        DOCUMENT_STORE[doc_id] = doc_metadata
+        return doc_metadata
+
+    # --- Real ChromaDB Vectorization ---
+    # Chunk the document into ~200 word segments
+    words = content.split()
+    chunk_size = 200
+    chunks = []
+    for i in range(0, len(words), chunk_size):
+        chunk_text = " ".join(words[i:i + chunk_size])
+        if chunk_text.strip():
+            chunks.append(chunk_text)
+    
+    if not chunks:
+        chunks = [content[:2000]] if content.strip() else ["Empty document"]
+    
+    # Add chunks to ChromaDB
+    chunk_ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
+    chunk_metadata = [{"doc_id": doc_id, "filename": file.filename, "chunk_index": i} for i in range(len(chunks))]
+    
+    rag_collection.add(
+        documents=chunks,
+        ids=chunk_ids,
+        metadatas=chunk_metadata
+    )
+    
+    doc_metadata = {
+        "id": doc_id,
+        "filename": file.filename,
+        "status": "indexed",
+        "message": "",
+        "vectors": len(chunks),
+        "content": content
+    }
+    DOCUMENT_STORE[doc_id] = doc_metadata
+    print(f"Indexed {len(chunks)} chunks into ChromaDB for {file.filename}")
+    return doc_metadata
+
+@app.get("/documents")
+async def get_documents():
+    return list(DOCUMENT_STORE.values())
+
+@app.get("/documents/{doc_id}")
+async def get_document(doc_id: str):
+    if doc_id not in DOCUMENT_STORE:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return DOCUMENT_STORE[doc_id]
+
+@app.post("/rag-query")
+async def rag_query(request: Request):
+    data = await request.json()
+    query = data.get("query", "")
+    
+    if not query:
+        return {"results": [], "answer": "No query provided."}
+    
+    # Real semantic search via ChromaDB
+    try:
+        results = rag_collection.query(
+            query_texts=[query],
+            n_results=5
+        )
+    except Exception as e:
+        return {"results": [], "answer": f"ChromaDB query error: {str(e)}"}
+    
+    if not results["documents"] or not results["documents"][0]:
+        return {"results": [], "answer": f"No documents in ChromaDB matched the query: '{query}'. Collection has {rag_collection.count()} chunks indexed."}
+    
+    # Build response from ChromaDB results
+    matched_docs = results["documents"][0]
+    matched_meta = results["metadatas"][0]
+    matched_distances = results["distances"][0] if "distances" in results else [0] * len(matched_docs)
+    
+    context_parts = []
+    for doc_text, meta, dist in zip(matched_docs, matched_meta, matched_distances):
+        similarity = round(1 - dist, 3) if dist else 1.0
+        context_parts.append(f"[Source: {meta.get('filename', 'Unknown')} | Similarity: {similarity}]\n{doc_text}")
+    
+    context = "\n\n---\n\n".join(context_parts)
+    return {"results": matched_meta, "answer": context, "chunk_count": rag_collection.count()}
+
+# --- Agent Builder Endpoints ---
+from pydantic import BaseModel
+from typing import List, Optional
+import uuid
+
+class CustomToolSchema(BaseModel):
+    name: str
+    description: str
+    code: str
+
+class CustomAgentSchema(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: str
+    tool_budget: int
+    system_prompt: str
+    tools: List[CustomToolSchema] = []
+    mcp_urls: List[str] = []
+    a2a_urls: List[str] = []
+
+AGENT_STORE = {}
+
+# --- SQLite persistence for agents ---
+import sqlite3
+import json as _json_mod
+
+def _init_agent_db():
+    conn = sqlite3.connect("circulardrive.db")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS custom_agents (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            tool_budget INTEGER DEFAULT 10,
+            system_prompt TEXT DEFAULT '',
+            tools TEXT DEFAULT '[]'
+        )
+    """)
+    # Handle schema migration for mcp_urls and a2a_urls
+    try:
+        conn.execute("ALTER TABLE custom_agents ADD COLUMN mcp_urls TEXT DEFAULT '[]'")
+    except sqlite3.OperationalError:
+        pass # Column already exists
+    try:
+        conn.execute("ALTER TABLE custom_agents ADD COLUMN a2a_urls TEXT DEFAULT '[]'")
+    except sqlite3.OperationalError:
+        pass
+
+    # Legacy migration: Check if old mcp_url column exists and we need to ignore it or map it,
+    # but we'll just query what we need. We'll use a pragma to check columns to safely select.
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(custom_agents)")
+    columns = [col[1] for col in cursor.fetchall()]
+    
+    query_cols = "id, name, description, tool_budget, system_prompt, tools, mcp_urls, a2a_urls"
+    # Fallback to old schema reading if something goes wrong, but ALTER TABLE should have worked.
+    
+    conn.commit()
+    
+    # Load all persisted agents into memory
+    rows = conn.execute(f"SELECT {query_cols} FROM custom_agents").fetchall()
+    for row in rows:
+        try:
+            mcp_urls = _json_mod.loads(row[6]) if row[6] else []
+        except:
+            mcp_urls = []
+        try:
+            a2a_urls = _json_mod.loads(row[7]) if row[7] else []
+        except:
+            a2a_urls = []
+            
+        AGENT_STORE[row[0]] = {
+            "id": row[0], "name": row[1], "description": row[2],
+            "tool_budget": row[3], "system_prompt": row[4],
+            "tools": _json_mod.loads(row[5]),
+            "mcp_urls": mcp_urls,
+            "a2a_urls": a2a_urls
+        }
+    conn.close()
+    print(f"Loaded {len(AGENT_STORE)} agents from SQLite")
+
+_init_agent_db()
+
+def _persist_agent(agent_dict):
+    conn = sqlite3.connect("circulardrive.db")
+    conn.execute("""
+        INSERT OR REPLACE INTO custom_agents (id, name, description, tool_budget, system_prompt, tools, mcp_urls, a2a_urls)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        agent_dict["id"], agent_dict["name"], agent_dict.get("description", ""),
+        agent_dict.get("tool_budget", 10), agent_dict.get("system_prompt", ""),
+        _json_mod.dumps(agent_dict.get("tools", [])),
+        _json_mod.dumps(agent_dict.get("mcp_urls", [])),
+        _json_mod.dumps(agent_dict.get("a2a_urls", []))
+    ))
+    conn.commit()
+    conn.close()
+
+def _delete_agent_db(agent_id):
+    conn = sqlite3.connect("circulardrive.db")
+    conn.execute("DELETE FROM custom_agents WHERE id = ?", (agent_id,))
+    conn.commit()
+    conn.close()
+
+@app.get("/agents")
+async def get_agents():
+    return list(AGENT_STORE.values())
+
+@app.post("/agents")
+async def save_agent(agent: CustomAgentSchema):
+    if not agent.id:
+        agent.id = str(uuid.uuid4())
+    agent_dict = agent.dict()
+    AGENT_STORE[agent.id] = agent_dict
+    _persist_agent(agent_dict)
+    return agent_dict
+
+@app.delete("/agents/{agent_id}")
+async def delete_agent(agent_id: str):
+    if agent_id not in AGENT_STORE:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    del AGENT_STORE[agent_id]
+    _delete_agent_db(agent_id)
+    return {"status": "deleted"}
+
+@app.get("/agents/{agent_id}/.well-known/agent.json")
+async def get_custom_agent_card(agent_id: str):
+    """Dynamically generated A2A agent card for custom agents"""
+    if agent_id not in AGENT_STORE:
+        raise HTTPException(status_code=404, detail="Agent not found")
+        
+    agent = AGENT_STORE[agent_id]
+    return {
+        "name": agent.get("name", "Custom Agent"),
+        "description": agent.get("description", ""),
+        "url": f"http://localhost:8000/agents/{agent_id}",
+        "provider": {
+            "organization": "CircularDrive AI (Custom)",
+            "url": "http://localhost:8000",
+        },
+        "version": "1.0.0",
+        "capabilities": {
+            "streaming": True,
+            "pushNotifications": False,
+            "stateTransitionHistory": False,
+        },
+        "authentication": {
+            "schemes": ["none"],
+        },
+        "defaultInputModes": ["text/plain"],
+        "tools": [t.get("name") for t in agent.get("tools", [])],
+        "mcp_enabled": bool(agent.get("mcp_urls")),
+        "a2a_delegation_enabled": bool(agent.get("a2a_urls"))
+    }
+
+class VerifyUrlRequest(BaseModel):
+    url: str
+
+import requests
+
+@app.post("/verify-mcp-url")
+async def verify_mcp_url(req: VerifyUrlRequest):
+    try:
+        # MCP server endpoint could be /mcp, /sse, /call or root. Just checking reachability.
+        # Often it responds to GET or OPTIONS if alive.
+        res = requests.options(req.url, timeout=5)
+        if res.status_code < 500: # 405 Method Not Allowed is fine, means server is up
+            return {"status": "valid", "message": f"Server reachable (HTTP {res.status_code})"}
+        
+        # Try a simple GET if OPTIONS fails or returns 500+
+        res = requests.get(req.url, timeout=5)
+        if res.status_code < 500:
+            return {"status": "valid", "message": f"Server reachable (HTTP {res.status_code})"}
+            
+        return {"status": "invalid", "message": f"Server returned error {res.status_code}"}
+    except Exception as e:
+        return {"status": "invalid", "message": f"Connection failed: {str(e)}"}
+
+@app.post("/verify-a2a-url")
+async def verify_a2a_url(req: VerifyUrlRequest):
+    try:
+        res = requests.get(req.url, timeout=5)
+        if res.status_code != 200:
+            return {"status": "invalid", "message": f"HTTP {res.status_code}"}
+        
+        data = res.json()
+        if isinstance(data, dict) and "name" in data and ("capabilities" in data or "provider" in data):
+            return {"status": "valid", "message": f"Valid Agent Card: {data.get('name')}"}
+            
+        return {"status": "invalid", "message": "Valid JSON, but not an A2A Agent Card format"}
+    except Exception as e:
+        return {"status": "invalid", "message": f"Failed to verify: {str(e)}"}
+
+class AgentTestRequest(BaseModel):
+    message: str
+
+from agents.dynamic_agent_runtime import DynamicAgentBuilder
+import asyncio
+
+@app.post("/agents/{agent_id}/a2a/tasks/send")
+async def dynamic_agent_a2a_send_task(agent_id: str, request: Request):
+    if agent_id not in AGENT_STORE:
+        raise HTTPException(status_code=404, detail="Agent not found")
+        
+    body = await request.json()
+    message_parts = body.get("params", {}).get("message", {}).get("parts", [])
+    message_text = ""
+    for part in message_parts:
+        if part.get("type") == "text":
+            message_text += part.get("text", "")
+
+    if not message_text:
+        raise HTTPException(status_code=400, detail="No text message in task")
+
+    agent_data = AGENT_STORE[agent_id]
+    builder = DynamicAgentBuilder()
+    graph = builder.build_agent(
+        system_prompt=agent_data.get("system_prompt", ""),
+        tool_configs=agent_data.get("tools", []),
+        mcp_urls=agent_data.get("mcp_urls", []),
+        a2a_urls=agent_data.get("a2a_urls", [])
+    )
+    
+    try:
+        from langchain_core.messages import HumanMessage
+        result = await asyncio.to_thread(
+            lambda: graph.invoke({"messages": [HumanMessage(content=message_text)]})
+        )
+        response_text = result["messages"][-1].content
+    except Exception as e:
+        response_text = f"Error executing agent: {str(e)}"
+        
+    import uuid
+    task_id = str(uuid.uuid4())
+    return {
+        "jsonrpc": "2.0",
+        "id": body.get("id"),
+        "result": {
+            "id": task_id,
+            "status": "completed",
+            "response": response_text
+        }
+    }
+
+@app.post("/agents/{agent_id}/test-stream")
+async def test_agent_stream(agent_id: str, req: AgentTestRequest):
+    if agent_id not in AGENT_STORE:
+        raise HTTPException(status_code=404, detail="Agent not found")
+        
+    agent_data = AGENT_STORE[agent_id]
+    
+    # Instantiate the agent builder and compile the graph
+    builder = DynamicAgentBuilder()
+    graph = builder.build_agent(
+        system_prompt=agent_data.get("system_prompt", ""),
+        tool_configs=agent_data.get("tools", []),
+        mcp_urls=agent_data.get("mcp_urls", []),
+        a2a_urls=agent_data.get("a2a_urls", [])
+    )
+    
+    async def event_generator():
+        try:
+            from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+            import json
+            state = {"messages": [HumanMessage(content=req.message)]}
+            async for output in graph.astream(state, stream_mode="updates"):
+                for node_name, node_state in output.items():
+                    if "messages" in node_state:
+                        for msg in node_state["messages"]:
+                            if isinstance(msg, AIMessage):
+                                if msg.content:
+                                    yield f"data: {json.dumps({'type': 'chunk', 'content': msg.content})}\n\n"
+                                if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                                    for tc in msg.tool_calls:
+                                        yield f"data: {json.dumps({'type': 'tool_start', 'tool': tc['name'], 'input': tc['args']})}\n\n"
+                            elif isinstance(msg, ToolMessage):
+                                yield f"data: {json.dumps({'type': 'tool_end', 'tool': msg.name, 'output': str(msg.content)})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 if __name__ == "__main__":
     import uvicorn
