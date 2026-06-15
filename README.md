@@ -84,7 +84,9 @@ CopilotKit implements AG-UI natively and provides:
 5. **Circularity Scoring** : Multi-factor score (0-100)
 6. **Design Recyclability** : Improvement suggestions with scoring
 7. **AI Copilot** : Open-ended conversational interface via CopilotKit
-8. **Agent Interoperability** : A2A protocol for agent-to-agent communication
+8. **Dynamic Agent Builder** : Create custom agents through the UI with Auto-Verification for external MCP servers and A2A endpoints.
+9. **Multi-Agent Interoperability** : Native A2A protocol support where each custom agent publishes its own `/.well-known/agent.json` and proxies tasks to specialized sub-agents.
+10. **Interactive Vehicle Studio** : Interactive 3D component exploration and advanced, fully dynamic vehicle-to-vehicle circularity comparisons.
 
 ---
 
