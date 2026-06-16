@@ -57,10 +57,10 @@ Other AI agents can discover and interact with CircuVolt AI agents autonomously.
 
 ### AG-UI Protocol + CopilotKit
 The AG-UI (Agent-User Interaction) protocol streams agent state to the frontend:
-- **TEXT_MESSAGE** events : streaming text responses
-- **TOOL_CALL** events : real-time tool invocation visibility
+- **TEXT_MESSAGE** events: streaming text responses
+- **TOOL_CALL** events: real-time tool invocation visibility
 - **STATE_SNAPSHOT/DELTA** : agent state synchronization
-- **RUN lifecycle** events : start/finish tracking
+- **RUN lifecycle** events: start/finish tracking
 
 CopilotKit implements AG-UI natively and provides:
 - `CopilotSidebar` : conversational AI assistant panel
@@ -152,18 +152,18 @@ npm run dev
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Agent Framework | LangGraph (ReAct pattern) |
-| LLM Orchestration | LangChain + LangChain-OpenAI |
-| Tool Protocol | MCP (Model Context Protocol) |
-| Agent Communication | A2A (Google Agent-to-Agent Protocol) |
-| UI Protocol | AG-UI (via CopilotKit) |
-| Frontend | React, Vite, Tailwind CSS, CopilotKit, Recharts |
-| Backend | FastAPI, Python |
-| ML | Scikit-learn, GradientBoosting, NumPy, Pandas |
-| Database | SQLite (SQLAlchemy ORM) |
-| QR Generation | Python qrcode library |
+| Layer               | Technology                                      |
+|---------------------|-------------------------------------------------|
+| Agent Framework     | LangGraph (ReAct pattern)                       |
+| LLM Orchestration   | LangChain + LangChain-OpenAI                    |
+| Tool Protocol       | MCP (Model Context Protocol)                    |
+| Agent Communication | A2A (Google Agent-to-Agent Protocol)            |
+| UI Protocol         | AG-UI (via CopilotKit)                          |
+| Frontend            | React, Vite, Tailwind CSS, CopilotKit, Recharts |
+| Backend             | FastAPI, Python                                 |
+| ML                  | Scikit-learn, GradientBoosting, NumPy, Pandas   |
+| Database            | SQLite (SQLAlchemy ORM)                         |
+| QR Generation       | Python qrcode library                           |
 
 ---
 
